@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+
 
 from ccxt.base.exchange import Exchange
 import math
@@ -214,8 +214,8 @@ class bitstamp (Exchange):
         if 'date' in trade:
             timestamp = int(trade['date']) * 1000
         elif 'datetime' in trade:
-            # timestamp = self.parse8601(trade['datetime'])
-            timestamp = int(trade['datetime']) * 1000
+            timestamp = self.parse8601(trade['datetime'])
+            #timestamp = int(trade['datetime']) * 1000
         side = 'buy' if (trade['type'] == 0) else 'sell'
         order = None
         if 'order_id' in trade:
@@ -223,12 +223,19 @@ class bitstamp (Exchange):
         if 'currency_pair' in trade:
             if trade['currency_pair'] in self.markets_by_id:
                 market = self.markets_by_id[trade['currency_pair']]
+        if market is not None and 'symbol' in market:
+            symbol = market['symbol']
+        if 'currency_pair' in trade:
+            symbol = trade['currency_pair']
+
+        print(market)
+        print(trade)
         return {
-            'id': str(trade['tid']),
+            'id': str(trade['id']),
             'info': trade,
             'timestamp': timestamp,
             'datetime': self.iso8601(timestamp),
-            'symbol': market['symbol'],
+            'symbol': symbol,
             'order': order,
             'type': None,
             'side': side,
@@ -333,8 +340,13 @@ class bitstamp (Exchange):
         if symbol:
             market = self.market(symbol)
         pair = market['id'] if market else 'all'
-        request = self.extend({'pair': pair}, params)
-        response = self.privatePostOpenOrdersPair(request)
+        if pair == 'all':
+            response = self.privatePostOpenOrdersAll(params)
+        else:
+            request = self.extend({'pair': pair}, params)
+            response = self.privatePostOpenOrdersPair(request)
+        #response = self.privatePostOpenOrdersPair(request)
+
         return self.parse_trades(response, market, since, limit)
 
     def fetch_order(self, id, symbol=None, params={}):
