@@ -7,6 +7,9 @@ from ccxt.base.errors import ExchangeError
 
 class bitstamp (Exchange):
 
+    def nonce(self):
+        return Exchange.milliseconds()
+
     def describe(self):
         return self.deep_extend(super(bitstamp, self).describe(), {
             'id': 'bitstamp',
