@@ -1,7 +1,6 @@
-
-
 from ccxt.base.exchange import Exchange
 import math
+import datetime
 from ccxt.base.errors import ExchangeError
 
 
@@ -221,8 +220,8 @@ class bitstamp (Exchange):
             #timestamp = int(trade['datetime']) * 1000
         side = 'buy' if (trade['type'] == 0) else 'sell'
         order = None
-        if 'order_id' in trade:
-            order = str(trade['order_id'])
+        if 'id' in trade:
+            order = str(trade['id'])
         if 'currency_pair' in trade:
             if trade['currency_pair'] in self.markets_by_id:
                 market = self.markets_by_id[trade['currency_pair']]
@@ -290,7 +289,6 @@ class bitstamp (Exchange):
         method += 'Pair'
         response = getattr(self, method)(self.extend(order, params))
 
-        response = self.privatePostOrderNew(self.extend(order, params))
         return self.parse_order(response)
 
     def cancel_order(self, id, symbol=None, params={}):
@@ -298,6 +296,8 @@ class bitstamp (Exchange):
         return self.privatePostCancelOrder({'id': id})
 
     def parse_order_status(self, order):
+        if 'status' not in order:
+            return 'open'
         if (order['status'] == 'Queue') or (order['status'] == 'Open'):
             return 'open'
         if order['status'] == 'Finished':
@@ -305,21 +305,35 @@ class bitstamp (Exchange):
         return order['status']
 
     def parse_order(self, order):
-        timestamp = order['timestamp']
-        datetime = self.iso8601(order['datetime'])
+        print("\n\n")
+        print(order)
+
+        if 'transactions' in order:
+            print("special case needed here")
+
+        # TODO: need to fix this
+        timestamp = datetime.datetime.now()
+        api_datetime = self.parse8601(order['datetime'])
         status = self.parse_order_status(order)
         price = self.safe_float(order, 'price')
         amount = self.safe_float(order, 'amount')
         filled = self.safe_float(order, 'executed_amount')
         remaining = self.safe_float(order, 'amount')
-        symbol = order['currency_pair']
-        order_type = "buy" if int(order['type']) else "sell"
+
+        symbol = ""
+        if 'currency_pair' in order:
+            symbol = order['currency_pair']
+
+        if order['type'] == "0":
+            order_type = "buy"
+        else:
+            order_type = "sell"
 
         return {
             'id': str(order['id']),
             'info': order,
             'timestamp': timestamp,
-            'datetime': datetime,
+            'datetime': api_datetime,
             'status': status,
             'symbol': symbol,
             'type': order_type,
@@ -329,8 +343,6 @@ class bitstamp (Exchange):
             'remaining': remaining,
             'amount': amount,
         }
-
-
 
     def fetch_order_status(self, id, symbol=None):
         self.load_markets()
@@ -355,7 +367,7 @@ class bitstamp (Exchange):
     def fetch_order(self, id, symbol=None, params={}):
         self.load_markets()
         response = self.privatePostOrderStatus(self.extend({
-            'order_id': id,
+            'id': id,
         }, params))
         return self.parse_order(response)
 

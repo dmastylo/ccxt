@@ -10,6 +10,9 @@ from ccxt.base.errors import OrderNotFound
 
 class binance (Exchange):
 
+    def nonce(self):
+        return Exchange.milliseconds()
+
     def describe(self):
         return self.deep_extend(super(binance, self).describe(), {
             'id': 'binance',
