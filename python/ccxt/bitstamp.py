@@ -304,31 +304,53 @@ class bitstamp (Exchange):
             return 'closed'
         return order['status']
 
-    def parse_order(self, order):
+    def parse_order(order):
         print("\n\n")
         print(order)
-
+    
+        status = parse_order_status(order)
+    
         if 'transactions' in order:
             print("special case needed here")
-
+    
+            filled_amount = 0
+            total_fees = 0
+            total_price = 0
+            ignore_keys = ['fee', 'price', 'datetime', 'usd', 'tid', 'type']
+            for transaction in order['transactions']:
+                # Fine the crypto currency
+                print(transaction)
+                total_fees += float(transaction['fee'])
+                total_price += float(transaction['price'])
+                for trans_key, trans_value in transaction.items():
+                    if trans_key in ignore_keys:
+                        continue
+                    filled_amount += float(trans_value)
+            return {
+                'id': order['id'],
+                'status': status,
+                'filled': filled_amount,
+                'total_fees': total_fees,
+                'total_price': total_price,
+            }
+    
         # TODO: need to fix this
         timestamp = datetime.datetime.now()
-        api_datetime = self.parse8601(order['datetime'])
-        status = self.parse_order_status(order)
-        price = self.safe_float(order, 'price')
-        amount = self.safe_float(order, 'amount')
-        filled = self.safe_float(order, 'executed_amount')
-        remaining = self.safe_float(order, 'amount')
-
+        api_datetime = parse8601(order['datetime'])
+        price = safe_float(order, 'price')
+        amount = safe_float(order, 'amount')
+        filled = safe_float(order, 'executed_amount')
+        remaining = safe_float(order, 'amount')
+    
         symbol = ""
         if 'currency_pair' in order:
             symbol = order['currency_pair']
-
+    
         if order['type'] == "0":
             order_type = "buy"
         else:
             order_type = "sell"
-
+    
         return {
             'id': str(order['id']),
             'info': order,
