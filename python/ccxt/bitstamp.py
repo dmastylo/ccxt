@@ -230,8 +230,6 @@ class bitstamp (Exchange):
         if 'currency_pair' in trade:
             symbol = trade['currency_pair']
 
-        print(market)
-        print(trade)
         return {
             'id': str(trade['id']),
             'info': trade,
@@ -304,22 +302,16 @@ class bitstamp (Exchange):
             return 'closed'
         return order['status']
 
-    def parse_order(order):
-        print("\n\n")
-        print(order)
-    
-        status = parse_order_status(order)
+    def parse_order(self, order):
+        status = self.parse_order_status(order)
     
         if 'transactions' in order:
-            print("special case needed here")
-    
             filled_amount = 0
             total_fees = 0
             total_price = 0
             ignore_keys = ['fee', 'price', 'datetime', 'usd', 'tid', 'type']
             for transaction in order['transactions']:
                 # Fine the crypto currency
-                print(transaction)
                 total_fees += float(transaction['fee'])
                 total_price += float(transaction['price'])
                 for trans_key, trans_value in transaction.items():
@@ -336,11 +328,11 @@ class bitstamp (Exchange):
     
         # TODO: need to fix this
         timestamp = datetime.datetime.now()
-        api_datetime = parse8601(order['datetime'])
-        price = safe_float(order, 'price')
-        amount = safe_float(order, 'amount')
-        filled = safe_float(order, 'executed_amount')
-        remaining = safe_float(order, 'amount')
+        api_datetime = self.parse8601(order['datetime'])
+        price = self.safe_float(order, 'price')
+        amount = self.safe_float(order, 'amount')
+        filled = self.safe_float(order, 'executed_amount')
+        remaining = self.safe_float(order, 'amount')
     
         symbol = ""
         if 'currency_pair' in order:
@@ -392,6 +384,34 @@ class bitstamp (Exchange):
             'id': id,
         }, params))
         return self.parse_order(response)
+
+    def fetch_deposit_address(self, currency, params={}):
+        self.load_markets()
+        request = {}
+        if currency.lower() == "eth":
+            response = self.privatePostEthAddress(request)
+        elif currency.lower() == "xrp":
+            response = self.privatePostXrpAddress(request)
+
+        return {
+            'info': response,
+        }
+
+    def withdraw(self, currency, amount, address, params={}):
+        request = {
+            'address': address,
+            'amount': float(amount),
+        }
+
+        if currency.lower() == "eth":
+            response = self.privatePostEthWithdrawal(self.extend(request, params))
+        elif currency.lower() == "xrp":
+            response = self.privatePostXrpWithdrawal(self.extend(request, params))
+
+        return {
+            'info': response,
+            'id': response['id'],
+        }
 
     def sign(self, path, api='public', method='GET', params={}, headers=None, body=None):
         url = self.urls['api'] + '/'
