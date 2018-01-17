@@ -1,4 +1,7 @@
 declare module 'ccxt' {
+    
+    export const version: string;
+    export const exchanges: string[];
 
     export interface Market {
         id: string;
@@ -112,6 +115,7 @@ declare module 'ccxt' {
         fetchOrderBook (market: string, params?: any): Promise<OrderBook>;
         fetchTicker (market: string): Promise<Ticker>;
         fetchTickers (): Promise<Tickers>;
+        fetchCurrencies (): Promise<any>;
         fetchTrades (symbol: string, params?: {}): Promise<Trade[]>;
         fetchOHLCV? (symbol: string, params?: {}): Promise<OHLCV[]>;
         fetchOrders (symbol?: string, params?: {}): Promise<Order[]>;
@@ -129,6 +133,7 @@ declare module 'ccxt' {
     export class acx extends Exchange {}
     export class allcoin extends okcoinusd {}
     export class anxpro extends Exchange {}
+    export class bibox extends Exchange {}
     export class binance extends Exchange {}
     export class bit2c extends Exchange {}
     export class bitbay extends Exchange {}
@@ -146,6 +151,7 @@ declare module 'ccxt' {
     export class bittrex extends Exchange {}
     export class bl3p extends Exchange {}
     export class bleutrade extends bittrex {}
+    export class braziliex extends Exchange {}
     export class btcbox extends Exchange {}
     export class btcchina extends Exchange {}
     export class btcexchange extends btcturk {}
@@ -160,6 +166,7 @@ declare module 'ccxt' {
     export class chbtc extends zb {}
     export class chilebit extends foxbit {}
     export class coincheck extends Exchange {}
+    export class coinexchange extends Exchange {}
     export class coinfloor extends Exchange {}
     export class coingi extends Exchange {}
     export class coinmarketcap extends Exchange {}
@@ -193,6 +200,7 @@ declare module 'ccxt' {
     export class liqui extends Exchange {}
     export class livecoin extends Exchange {}
     export class luno extends Exchange {}
+    export class lykke extends Exchange {}
     export class mercado extends Exchange {}
     export class mixcoins extends Exchange {}
     export class nova extends Exchange {}
@@ -203,7 +211,7 @@ declare module 'ccxt' {
     export class poloniex extends Exchange {}
     export class qryptos extends Exchange {}
     export class quadrigacx extends Exchange {}
-    export class quoine extends qryptos {}
+    export class quoinex extends qryptos {}
     export class southxchange extends Exchange {}
     export class surbitcoin extends foxbit {}
     export class therock extends Exchange {}

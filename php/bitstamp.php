@@ -12,7 +12,14 @@ class bitstamp extends Exchange {
             'rateLimit' => 1000,
             'version' => 'v2',
             'hasCORS' => false,
+            // obsolete metainfo interface
             'hasFetchOrder' => true,
+            'hasWithdraw' => true,
+            // new metainfo interface
+            'has' => array (
+                'fetchOrder' => true,
+                'withdraw' => true,
+            ),
             'urls' => array (
                 'logo' => 'https://user-images.githubusercontent.com/1294454/27786377-8c8ab57e-5fe9-11e7-8ea4-2b05b6bcceec.jpg',
                 'api' => 'https://www.bitstamp.net/api',
@@ -38,10 +45,12 @@ class bitstamp extends Exchange {
                     'post' => array (
                         'balance/',
                         'balance/{pair}/',
+                        'bch_withdrawal/',
+                        'bch_address/',
                         'user_transactions/',
                         'user_transactions/{pair}/',
                         'open_orders/all/',
-                        'open_orders/{pair}',
+                        'open_orders/{pair}/',
                         'order_status/',
                         'cancel_order/',
                         'buy/{pair}/',
@@ -52,10 +61,10 @@ class bitstamp extends Exchange {
                         'ltc_address/',
                         'eth_withdrawal/',
                         'eth_address/',
-                        'transfer-to-main/',
-                        'transfer-from-main/',
                         'xrp_withdrawal/',
                         'xrp_address/',
+                        'transfer-to-main/',
+                        'transfer-from-main/',
                         'withdrawal/open/',
                         'withdrawal/status/',
                         'withdrawal/cancel/',
@@ -68,6 +77,8 @@ class bitstamp extends Exchange {
                         'bitcoin_deposit_address/',
                         'unconfirmed_btc/',
                         'bitcoin_withdrawal/',
+                        'ripple_withdrawal/',
+                        'ripple_address/',
                     ),
                 ),
             ),
@@ -109,6 +120,7 @@ class bitstamp extends Exchange {
                     'percentage' => false,
                     'withdraw' => array (
                         'BTC' => 0,
+                        'BCH' => 0,
                         'LTC' => 0,
                         'ETH' => 0,
                         'XRP' => 0,
@@ -117,6 +129,7 @@ class bitstamp extends Exchange {
                     ),
                     'deposit' => array (
                         'BTC' => 0,
+                        'BCH' => 0,
                         'LTC' => 0,
                         'ETH' => 0,
                         'XRP' => 0,
@@ -135,19 +148,25 @@ class bitstamp extends Exchange {
             $market = $markets[$i];
             $symbol = $market['name'];
             list ($base, $quote) = explode ('/', $symbol);
+            $baseId = strtolower ($base);
+            $quoteId = strtolower ($quote);
+            $symbolId = $baseId . '_' . $quoteId;
             $id = $market['url_symbol'];
             $precision = array (
                 'amount' => $market['base_decimals'],
                 'price' => $market['counter_decimals'],
             );
             list ($cost, $currency) = explode (' ', $market['minimum_order']);
-            $active = ($market['trading'] == 'Enabled');
+            $active = ($market['trading'] === 'Enabled');
             $lot = pow (10, -$precision['amount']);
             $result[] = array (
                 'id' => $id,
                 'symbol' => $symbol,
                 'base' => $base,
                 'quote' => $quote,
+                'baseId' => $baseId,
+                'quoteId' => $quoteId,
+                'symbolId' => $symbolId,
                 'info' => $market,
                 'lot' => $lot,
                 'active' => $active,
@@ -216,19 +235,27 @@ class bitstamp extends Exchange {
         if (is_array ($trade) && array_key_exists ('date', $trade)) {
             $timestamp = intval ($trade['date']) * 1000;
         } else if (is_array ($trade) && array_key_exists ('datetime', $trade)) {
-            // $timestamp = $this->parse8601 ($trade['datetime']);
-            $timestamp = intval ($trade['datetime']) * 1000;
+            $timestamp = $this->parse8601 ($trade['datetime']);
         }
-        $side = ($trade['type'] == 0) ? 'buy' : 'sell';
+        $side = ($trade['type'] === '0') ? 'buy' : 'sell';
         $order = null;
         if (is_array ($trade) && array_key_exists ('order_id', $trade))
             $order = (string) $trade['order_id'];
         if (is_array ($trade) && array_key_exists ('currency_pair', $trade)) {
-            if (is_array ($this->markets_by_id) && array_key_exists ($trade['currency_pair'], $this->markets_by_id))
-                $market = $this->markets_by_id[$trade['currency_pair']];
+            $marketId = $trade['currency_pair'];
+            if (is_array ($this->markets_by_id) && array_key_exists ($marketId, $this->markets_by_id))
+                $market = $this->markets_by_id[$marketId];
         }
+        $price = $this->safe_float($trade, 'price');
+        $price = $this->safe_float($trade, $market['symbolId'], $price);
+        $amount = $this->safe_float($trade, 'amount');
+        $amount = $this->safe_float($trade, $market['baseId'], $amount);
+        $id = $this->safe_value($trade, 'tid');
+        $id = $this->safe_value($trade, 'id', $id);
+        if ($id)
+            $id = (string) $id;
         return array (
-            'id' => (string) $trade['tid'],
+            'id' => $id,
             'info' => $trade,
             'timestamp' => $timestamp,
             'datetime' => $this->iso8601 ($timestamp),
@@ -236,8 +263,8 @@ class bitstamp extends Exchange {
             'order' => $order,
             'type' => null,
             'side' => $side,
-            'price' => floatval ($trade['price']),
-            'amount' => floatval ($trade['amount']),
+            'price' => floatval ($price),
+            'amount' => floatval ($amount),
         );
     }
 
@@ -281,7 +308,7 @@ class bitstamp extends Exchange {
             'pair' => $this->market_id($symbol),
             'amount' => $amount,
         );
-        if ($type == 'market')
+        if ($type === 'market')
             $method .= 'Market';
         else
             $order['price'] = $price;
@@ -299,9 +326,9 @@ class bitstamp extends Exchange {
     }
 
     public function parse_order_status ($order) {
-        if (($order['status'] == 'Queue') || ($order['status'] == 'Open'))
+        if (($order['status'] === 'Queue') || ($order['status'] === 'Open'))
             return 'open';
-        if ($order['status'] == 'Finished')
+        if ($order['status'] === 'Finished')
             return 'closed';
         return $order['status'];
     }
@@ -319,7 +346,7 @@ class bitstamp extends Exchange {
             $market = $this->market ($symbol);
         $pair = $market ? $market['id'] : 'all';
         $request = array_merge (array ( 'pair' => $pair ), $params);
-        $response = $this->privatePostOpenOrdersPair ($request);
+        $response = $this->privatePostUserTransactionsPair ($request);
         return $this->parse_trades($response, $market, $since, $limit);
     }
 
@@ -328,13 +355,56 @@ class bitstamp extends Exchange {
         return $this->privatePostOrderStatus (array ( 'id' => $id ));
     }
 
+    public function get_currency_name ($code) {
+        if ($code === 'BTC')
+            return 'bitcoin';
+        return strtolower ($code);
+    }
+
+    public function is_fiat ($code) {
+        if ($code === 'USD')
+            return true;
+        if ($code === 'EUR')
+            return true;
+        return false;
+    }
+
+    public function withdraw ($code, $amount, $address, $params = array ()) {
+        $isFiat = $this->is_fiat ($code);
+        if ($isFiat)
+            throw new ExchangeError ($this->id . ' fiat withdraw() for ' . $code . ' is not implemented yet');
+        $name = $this->get_currency_name ($code);
+        $request = array (
+            'amount' => $amount,
+            'address' => $address,
+        );
+        $v1 = ($code === 'BTC');
+        $method = $v1 ? 'v1' : 'private'; // $v1 or v2
+        $method .= 'Post' . $this->capitalize ($name) . 'Withdrawal';
+        $query = $params;
+        if ($code === 'XRP') {
+            $tag = $this->safe_string($params, 'destination_tag');
+            if ($tag) {
+                $request['destination_tag'] = $tag;
+                $query = $this->omit ($params, 'destination_tag');
+            } else {
+                throw new ExchangeError ($this->id . ' withdraw() requires a destination_tag param for ' . $code);
+            }
+        }
+        $response = $this->$method (array_merge ($request, $query));
+        return array (
+            'info' => $response,
+            'id' => $response['id'],
+        );
+    }
+
     public function sign ($path, $api = 'public', $method = 'GET', $params = array (), $headers = null, $body = null) {
         $url = $this->urls['api'] . '/';
-        if ($api != 'v1')
+        if ($api !== 'v1')
             $url .= $this->version . '/';
         $url .= $this->implode_params($path, $params);
         $query = $this->omit ($params, $this->extract_params($path));
-        if ($api == 'public') {
+        if ($api === 'public') {
             if ($query)
                 $url .= '?' . $this->urlencode ($query);
         } else {
@@ -358,7 +428,7 @@ class bitstamp extends Exchange {
     public function request ($path, $api = 'public', $method = 'GET', $params = array (), $headers = null, $body = null) {
         $response = $this->fetch2 ($path, $api, $method, $params, $headers, $body);
         if (is_array ($response) && array_key_exists ('status', $response))
-            if ($response['status'] == 'error')
+            if ($response['status'] === 'error')
                 throw new ExchangeError ($this->id . ' ' . $this->json ($response));
         return $response;
     }

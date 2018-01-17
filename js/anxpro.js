@@ -1,9 +1,9 @@
-"use strict";
+'use strict';
 
 //  ---------------------------------------------------------------------------
 
-const Exchange = require ('./base/Exchange')
-const { ExchangeError } = require ('./base/errors')
+const Exchange = require ('./base/Exchange');
+const { ExchangeError } = require ('./base/errors');
 
 //  ---------------------------------------------------------------------------
 
@@ -112,8 +112,7 @@ module.exports = class anxpro extends Exchange {
         let t = parseInt (ticker['dataUpdateTime']);
         let timestamp = parseInt (t / 1000);
         let bid = this.safeFloat (ticker['buy'], 'value');
-        let ask = this.safeFloat (ticker['sell'], 'value');;
-        let vwap = parseFloat (ticker['vwap']['value']);
+        let ask = this.safeFloat (ticker['sell'], 'value');
         let baseVolume = parseFloat (ticker['vol']['value']);
         return {
             'symbol': symbol,
@@ -123,7 +122,7 @@ module.exports = class anxpro extends Exchange {
             'low': parseFloat (ticker['low']['value']),
             'bid': bid,
             'ask': ask,
-            'vwap': vwap,
+            'vwap': undefined,
             'open': undefined,
             'close': undefined,
             'first': undefined,
@@ -132,16 +131,13 @@ module.exports = class anxpro extends Exchange {
             'percentage': undefined,
             'average': parseFloat (ticker['avg']['value']),
             'baseVolume': baseVolume,
-            'quoteVolume': baseVolume * vwap,
+            'quoteVolume': undefined,
             'info': ticker,
         };
     }
 
     async fetchTrades (symbol, since = undefined, limit = undefined, params = {}) {
         throw new ExchangeError (this.id + ' switched off the trades endpoint, see their docs at http://docs.anxv2.apiary.io/reference/market-data/currencypairmoneytradefetch-disabled');
-        return this.publicGetCurrencyPairMoneyTradeFetch (this.extend ({
-            'currency_pair': this.marketId (symbol),
-        }, params));
     }
 
     async createOrder (symbol, type, side, amount, price = undefined, params = {}) {
@@ -150,10 +146,10 @@ module.exports = class anxpro extends Exchange {
             'currency_pair': market['id'],
             'amount_int': parseInt (amount * 100000000), // 10^8
         };
-        if (type == 'limit') {
+        if (type === 'limit') {
             order['price_int'] = parseInt (price * market['multiplier']); // 10^5 or 10^8
         }
-        order['type'] = (side == 'buy') ? 'bid' : 'ask';
+        order['type'] = (side === 'buy') ? 'bid' : 'ask';
         let result = await this.privatePostCurrencyPairMoneyOrderAdd (this.extend (order, params));
         return {
             'info': result,
@@ -166,15 +162,15 @@ module.exports = class anxpro extends Exchange {
     }
 
     getAmountMultiplier (currency) {
-        if (currency == 'BTC') {
+        if (currency === 'BTC') {
             return 100000000;
-        } else if (currency == 'LTC') {
+        } else if (currency === 'LTC') {
             return 100000000;
-        } else if (currency == 'STR') {
+        } else if (currency === 'STR') {
             return 100000000;
-        } else if (currency == 'XRP') {
+        } else if (currency === 'XRP') {
             return 100000000;
-        } else if (currency == 'DOGE') {
+        } else if (currency === 'DOGE') {
             return 100000000;
         }
         return 100;
@@ -202,7 +198,7 @@ module.exports = class anxpro extends Exchange {
         let request = this.implodeParams (path, params);
         let query = this.omit (params, this.extractParams (path));
         let url = this.urls['api'] + '/' + this.version + '/' + request;
-        if (api == 'public') {
+        if (api === 'public') {
             if (Object.keys (query).length)
                 url += '?' + this.urlencode (query);
         } else {
@@ -210,7 +206,7 @@ module.exports = class anxpro extends Exchange {
             let nonce = this.nonce ();
             body = this.urlencode (this.extend ({ 'nonce': nonce }, query));
             let secret = this.base64ToBinary (this.secret);
-            let auth = request + "\0" + body;
+            let auth = request + '\0' + body;
             let signature = this.hmac (this.encode (auth), secret, 'sha512', 'base64');
             headers = {
                 'Content-Type': 'application/x-www-form-urlencoded',
@@ -224,7 +220,7 @@ module.exports = class anxpro extends Exchange {
     async request (path, api = 'public', method = 'GET', params = {}, headers = undefined, body = undefined) {
         let response = await this.fetch2 (path, api, method, params, headers, body);
         if ('result' in response)
-            if (response['result'] == 'success')
+            if (response['result'] === 'success')
                 return response;
         throw new ExchangeError (this.id + ' ' + this.json (response));
     }

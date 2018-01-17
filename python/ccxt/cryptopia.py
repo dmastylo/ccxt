@@ -87,31 +87,34 @@ class cryptopia (Exchange):
         })
 
     def common_currency_code(self, currency):
-        if currency == 'CC':
-            return 'CCX'
-        if currency == 'FCN':
-            return 'Facilecoin'
-        if currency == 'NET':
-            return 'NetCoin'
-        if currency == 'BTG':
-            return 'Bitgem'
-        if currency == 'FUEL':
-            return 'FC2'  # FuelCoin != FUEL
-        if currency == 'WRC':
-            return 'WarCoin'
+        currencies = {
+            'ACC': 'AdCoin',
+            'CC': 'CCX',
+            'CMT': 'Comet',
+            'FCN': 'Facilecoin',
+            'NET': 'NetCoin',
+            'BTG': 'Bitgem',
+            'FUEL': 'FC2',  # FuelCoin != FUEL
+            'QBT': 'Cubits',
+            'WRC': 'WarCoin',
+        }
+        if currency in currencies:
+            return currencies[currency]
         return currency
 
     def currency_id(self, currency):
-        if currency == 'CCX':
-            return 'CC'
-        if currency == 'Facilecoin':
-            return 'FCN'
-        if currency == 'NetCoin':
-            return 'NET'
-        if currency == 'Bitgem':
-            return 'BTG'
-        if currency == 'FC2':
-            return 'FUEL'  # FuelCoin != FUEL
+        currencies = {
+            'AdCoin': 'ACC',
+            'CCX': 'CC',
+            'Comet': 'CMT',
+            'Cubits': 'QBT',
+            'Facilecoin': 'FCN',
+            'NetCoin': 'NET',
+            'Bitgem': 'BTG',
+            'FC2': 'FUEL',
+        }
+        if currency in currencies:
+            return currencies[currency]
         return currency
 
     def fetch_markets(self):
@@ -130,17 +133,22 @@ class cryptopia (Exchange):
                 'amount': 8,
                 'price': 8,
             }
-            amountLimits = {
-                'min': market['MinimumTrade'],
-                'max': market['MaximumTrade']
-            }
+            lot = market['MinimumTrade']
             priceLimits = {
                 'min': market['MinimumPrice'],
                 'max': market['MaximumPrice'],
             }
+            amountLimits = {
+                'min': lot,
+                'max': market['MaximumTrade'],
+            }
             limits = {
                 'amount': amountLimits,
                 'price': priceLimits,
+                'cost': {
+                    'min': priceLimits['min'] * amountLimits['min'],
+                    'max': None,
+                },
             }
             active = market['Status'] == 'OK'
             result.append({
@@ -151,7 +159,7 @@ class cryptopia (Exchange):
                 'info': market,
                 'maker': market['TradeFee'] / 100,
                 'taker': market['TradeFee'] / 100,
-                'lot': amountLimits['min'],
+                'lot': limits['amount']['min'],
                 'active': active,
                 'precision': precision,
                 'limits': limits,
@@ -259,10 +267,16 @@ class cryptopia (Exchange):
     def fetch_trades(self, symbol, since=None, limit=None, params={}):
         self.load_markets()
         market = self.market(symbol)
-        response = self.publicGetMarketHistoryIdHours(self.extend({
+        hours = 24  # the default
+        if since:
+            elapsed = self.milliseconds() - since
+            hour = 1000 * 60 * 60
+            hours = int(elapsed / hour)
+        request = {
             'id': market['id'],
-            'hours': 24,  # default
-        }, params))
+            'hours': hours,
+        }
+        response = self.publicGetMarketHistoryIdHours(self.extend(request, params))
         trades = response['Data']
         return self.parse_trades(trades, market, since, limit)
 
@@ -303,7 +317,7 @@ class cryptopia (Exchange):
                 'precision': precision,
                 'limits': {
                     'amount': {
-                        'min': currency['MinBaseTrade'],
+                        'min': math.pow(10, -precision),
                         'max': math.pow(10, precision),
                     },
                     'price': {
@@ -311,7 +325,7 @@ class cryptopia (Exchange):
                         'max': math.pow(10, precision),
                     },
                     'cost': {
-                        'min': None,
+                        'min': currency['MinBaseTrade'],
                         'max': None,
                     },
                     'withdraw': {
@@ -341,15 +355,19 @@ class cryptopia (Exchange):
         return self.parse_balance(result)
 
     def create_order(self, symbol, type, side, amount, price=None, params={}):
+        if type == 'market':
+            raise ExchangeError(self.id + ' allows limit orders only')
         self.load_markets()
         market = self.market(symbol)
-        price = float(price)
-        amount = float(amount)
+        # price = float(price)
+        # amount = float(amount)
         request = {
             'TradePairId': market['id'],
             'Type': self.capitalize(side),
-            'Rate': self.price_to_precision(symbol, price),
-            'Amount': self.amount_to_precision(symbol, amount),
+            # 'Rate': self.price_to_precision(symbol, price),
+            # 'Amount': self.amount_to_precision(symbol, amount),
+            'Rate': price,
+            'Amount': amount,
         }
         response = self.privatePostSubmitTrade(self.extend(request, params))
         if not response:
@@ -475,7 +493,7 @@ class cryptopia (Exchange):
 
     def fetch_order(self, id, symbol=None, params={}):
         id = str(id)
-        orders = self.fetch_orders(symbol, params)
+        orders = self.fetch_orders(symbol, None, None, params)
         for i in range(0, len(orders)):
             if orders[i]['id'] == id:
                 return orders[i]
@@ -500,7 +518,7 @@ class cryptopia (Exchange):
     def fetch_deposit_address(self, currency, params={}):
         currencyId = self.currency_id(currency)
         response = self.privatePostGetDepositAddress(self.extend({
-            'Currency': currencyId
+            'Currency': currencyId,
         }, params))
         address = self.safe_string(response['Data'], 'BaseAddress')
         if not address:

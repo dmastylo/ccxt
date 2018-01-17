@@ -112,15 +112,15 @@ class bitlish extends Exchange {
     public function common_currency_code ($currency) {
         if (!$this->substituteCommonCurrencyCodes)
             return $currency;
-        if ($currency == 'XBT')
+        if ($currency === 'XBT')
             return 'BTC';
-        if ($currency == 'BCC')
+        if ($currency === 'BCC')
             return 'BCH';
-        if ($currency == 'DRK')
+        if ($currency === 'DRK')
             return 'DASH';
-        if ($currency == 'DSH')
+        if ($currency === 'DSH')
             $currency = 'DASH';
-        if ($currency == 'XDG')
+        if ($currency === 'XDG')
             $currency = 'DOGE';
         return $currency;
     }
@@ -214,12 +214,15 @@ class bitlish extends Exchange {
         $orderbook = $this->publicGetTradesDepth (array_merge (array (
             'pair_id' => $this->market_id($symbol),
         ), $params));
-        $timestamp = intval (intval ($orderbook['last']) / 1000);
+        $timestamp = null;
+        $last = $this->safe_integer($orderbook, 'last');
+        if ($last)
+            $timestamp = intval ($last / 1000);
         return $this->parse_order_book($orderbook, $timestamp, 'bid', 'ask', 'price', 'volume');
     }
 
     public function parse_trade ($trade, $market = null) {
-        $side = ($trade['dir'] == 'bid') ? 'buy' : 'sell';
+        $side = ($trade['dir'] === 'bid') ? 'buy' : 'sell';
         $symbol = null;
         if ($market)
             $symbol = $market['symbol'];
@@ -258,9 +261,9 @@ class bitlish extends Exchange {
             $account = $response[$currency];
             $currency = strtoupper ($currency);
             // issue #4 bitlish names Dash as DSH, instead of DASH
-            if ($currency == 'DSH')
+            if ($currency === 'DSH')
                 $currency = 'DASH';
-            if ($currency == 'XDG')
+            if ($currency === 'XDG')
                 $currency = 'DOGE';
             $balance[$currency] = $account;
         }
@@ -289,10 +292,10 @@ class bitlish extends Exchange {
         $this->load_markets();
         $order = array (
             'pair_id' => $this->market_id($symbol),
-            'dir' => ($side == 'buy') ? 'bid' : 'ask',
+            'dir' => ($side === 'buy') ? 'bid' : 'ask',
             'amount' => $amount,
         );
-        if ($type == 'limit')
+        if ($type === 'limit')
             $order['price'] = $price;
         $result = $this->privatePostCreateTrade (array_merge ($order, $params));
         return array (
@@ -308,7 +311,7 @@ class bitlish extends Exchange {
 
     public function withdraw ($currency, $amount, $address, $params = array ()) {
         $this->load_markets();
-        if ($currency != 'BTC') {
+        if ($currency !== 'BTC') {
             // they did not document other types...
             throw new NotSupported ($this->id . ' currently supports BTC withdrawals only, until they document other currencies...');
         }
@@ -326,12 +329,11 @@ class bitlish extends Exchange {
 
     public function sign ($path, $api = 'public', $method = 'GET', $params = array (), $headers = null, $body = null) {
         $url = $this->urls['api'] . '/' . $this->version . '/' . $path;
-        if ($api == 'public') {
-            if ($method == 'GET') {
+        if ($api === 'public') {
+            if ($method === 'GET') {
                 if ($params)
                     $url .= '?' . $this->urlencode ($params);
-            }
-            else {
+            } else {
                 $body = $this->json ($params);
                 $headers = array ( 'Content-Type' => 'application/json' );
             }

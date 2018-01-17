@@ -206,18 +206,18 @@ class acx extends Exchange {
     }
 
     public function parse_trade ($trade, $market = null) {
-        $timestamp = $trade['timestamp'] * 1000;
-        $side = ($trade['type'] == 'bid') ? 'buy' : 'sell';
+        $timestamp = $this->parse8601 ($trade['created_at']);
         return array (
-            'info' => $trade,
-            'id' => (string) $trade['tid'],
+            'id' => (string) $trade['id'],
             'timestamp' => $timestamp,
             'datetime' => $this->iso8601 ($timestamp),
             'symbol' => $market['symbol'],
             'type' => null,
-            'side' => $side,
-            'price' => $trade['price'],
-            'amount' => $trade['amount'],
+            'side' => null,
+            'price' => $this->safe_float($trade, 'price'),
+            'amount' => $this->safe_float($trade, 'volume'),
+            'cost' => $this->safe_float($trade, 'funds'),
+            'info' => $trade,
         );
     }
 
@@ -227,10 +227,7 @@ class acx extends Exchange {
         $response = $this->publicGetTrades (array_merge (array (
             'market' => $market['id'],
         ), $params));
-        // looks like they switched this endpoint off
-        // it returns 503 Service Temporarily Unavailable always
-        // return $this->parse_trades($response, $market, $since, $limit);
-        return $response;
+        return $this->parse_trades($response, $market, $since, $limit);
     }
 
     public function parse_ohlcv ($ohlcv, $market = null, $timeframe = '1m', $since = null, $limit = null) {
@@ -271,11 +268,11 @@ class acx extends Exchange {
         $timestamp = $this->parse8601 ($order['created_at']);
         $state = $order['state'];
         $status = null;
-        if ($state == 'done') {
+        if ($state === 'done') {
             $status = 'closed';
-        } else if ($state == 'wait') {
+        } else if ($state === 'wait') {
             $status = 'open';
-        } else if ($state == 'cancel') {
+        } else if ($state === 'cancel') {
             $status = 'canceled';
         }
         return array (
@@ -304,7 +301,7 @@ class acx extends Exchange {
             'volume' => (string) $amount,
             'ord_type' => $type,
         );
-        if ($type == 'limit') {
+        if ($type === 'limit') {
             $order['price'] = (string) $price;
         }
         $response = $this->privatePostOrders (array_merge ($order, $params));
@@ -315,8 +312,8 @@ class acx extends Exchange {
     public function cancel_order ($id, $symbol = null, $params = array ()) {
         $this->load_markets();
         $result = $this->privatePostOrderDelete (array ( 'id' => $id ));
-        $order = $this->parse_order ($result);
-        if ($order['status'] == 'closed') {
+        $order = $this->parse_order($result);
+        if ($order['status'] === 'closed') {
             throw new OrderNotFound ($this->id . ' ' . $result);
         }
         return $order;
@@ -363,7 +360,7 @@ class acx extends Exchange {
             $request .= $this->urls['extension'];
         $query = $this->omit ($params, $this->extract_params($path));
         $url = $this->urls['api'] . $request;
-        if ($api == 'public') {
+        if ($api === 'public') {
             if ($query) {
                 $url .= '?' . $this->urlencode ($query);
             }
@@ -377,7 +374,7 @@ class acx extends Exchange {
             $auth = $method . '|' . $request . '|' . $query;
             $signature = $this->hmac ($this->encode ($auth), $this->encode ($this->secret));
             $suffix = $query . '&$signature=' . $signature;
-            if ($method == 'GET') {
+            if ($method === 'GET') {
                 $url .= '?' . $suffix;
             } else {
                 $body = $suffix;

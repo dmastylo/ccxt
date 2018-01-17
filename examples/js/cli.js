@@ -13,10 +13,11 @@ const ccxt      = require ('../../ccxt.js')
     , asTable   = require ('as-table')
     , util      = require ('util')
     , log       = require ('ololog').configure ({ locate: false })
+    , { ExchangeError, NetworkError } = ccxt
 
 //-----------------------------------------------------------------------------
 
-require ('ansicolor').nice;
+require ('ansicolor').nice
 
 //-----------------------------------------------------------------------------
 
@@ -68,10 +69,36 @@ async function main () {
 
     } else {
 
-        let args = params.map (param =>
-            param.match (/[a-zA-Z]/g) ? param : parseFloat (param))
+        let args = params.map (param => {
+            if (param[0] === '{')
+                return JSON.parse (param)
+            return param.match (/[a-zA-Z]/g) ? param : parseFloat (param)
+        })
 
-        console.log (await exchange[methodName] (... args))
+        if (typeof exchange[methodName] == 'function') {
+            try {
+                log (await exchange[methodName] (... args))
+            } catch (e) {
+
+                if (e instanceof ExchangeError) {
+
+                    log.red (e.constructor.name, e.message)
+
+                } else if (e instanceof NetworkError) {
+
+                    log.yellow (e.constructor.name, e.message)
+
+                }
+
+                log.dim ('---------------------------------------------------')
+
+                // rethrow for call-stack // other errors
+                throw e
+
+            }
+        } else {
+            log (exchange[methodName])
+        }
 
     }
 }

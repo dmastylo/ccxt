@@ -18,13 +18,28 @@ class gemini (Exchange):
             'countries': 'US',
             'rateLimit': 1500,  # 200 for private API
             'version': 'v1',
+            # obsolete metainfo interface
             'hasCORS': False,
             'hasFetchOrder': True,
+            'hasWithdraw': True,
+            # new metainfo interface
+            'has': {
+                'CORS': False,
+                'withdraw': True,
+            },
             'urls': {
                 'logo': 'https://user-images.githubusercontent.com/1294454/27816857-ce7be644-6096-11e7-82d6-3c257263229c.jpg',
                 'api': 'https://api.gemini.com',
                 'www': 'https://gemini.com',
-                'doc': 'https://docs.gemini.com/rest-api',
+                'doc': [
+                    'https://docs.gemini.com/rest-api',
+                    'https://docs.sandbox.gemini.com',
+                ],
+                'test': 'https://api.sandbox.gemini.com',
+                'fees': [
+                    'https://gemini.com/fee-schedule/',
+                    'https://gemini.com/transfer-fees/',
+                ],
             },
             'api': {
                 'public': {
@@ -72,7 +87,7 @@ class gemini (Exchange):
                 'base': base,
                 'quote': quote,
                 'info': market,
-                'taker': 0.0025
+                'taker': 0.0025,
             })
         return result
 
@@ -238,6 +253,19 @@ class gemini (Exchange):
         response = self.privatePostWithdrawCurrency(self.extend(request, params))
         return {
             'info': response,
+        }
+
+    def withdraw(self, code, amount, address, params={}):
+        self.load_markets()
+        currency = self.currency(code)
+        response = self.privatePostWithdrawCurrency(self.extend({
+            'currency': currency['id'],
+            'amount': amount,
+            'address': address,
+        }, params))
+        return {
+            'info': response,
+            'id': self.safe_string(response, 'txHash'),
         }
 
     def sign(self, path, api='public', method='GET', params={}, headers=None, body=None):

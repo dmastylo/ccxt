@@ -8,7 +8,7 @@ class hitbtc2 extends hitbtc {
         return array_replace_recursive (parent::describe (), array (
             'id' => 'hitbtc2',
             'name' => 'HitBTC v2',
-            'countries' => 'HK', // Hong Kong
+            'countries' => 'UK',
             'rateLimit' => 1500,
             'version' => '2',
             'hasCORS' => true,
@@ -51,6 +51,10 @@ class hitbtc2 extends hitbtc {
                 'api' => 'https://api.hitbtc.com',
                 'www' => 'https://hitbtc.com',
                 'doc' => 'https://api.hitbtc.com',
+                'fees' => array (
+                    'https://hitbtc.com/fees-and-limits',
+                    'https://support.hitbtc.com/hc/en-us/articles/115005148605-Fees-and-limits',
+                ),
             ),
             'api' => array (
                 'public' => array (
@@ -111,10 +115,12 @@ class hitbtc2 extends hitbtc {
                     'tierBased' => false,
                     'percentage' => false,
                     'withdraw' => array (
-                        'BTC' => 0.0007,
-                        'ETH' => 0.00958,
+                        'BTC' => 0.00085,
+                        'BCC' => 0.0018,
+                        'ETH' => 0.00215,
                         'BCH' => 0.0018,
-                        'USDT' => 5,
+                        'USDT' => 100,
+                        'DASH' => 0.03,
                         'BTG' => 0.0005,
                         'LTC' => 0.003,
                         'ZEC' => 0.0001,
@@ -126,7 +132,7 @@ class hitbtc2 extends hitbtc {
                         'AIR' => 565,
                         'AMP' => 9,
                         'ANT' => 6.7,
-                        'ARDR' => 2,
+                        'ARDR' => 1,
                         'ARN' => 18.5,
                         'ART' => 26,
                         'ATB' => 0.0004,
@@ -306,8 +312,8 @@ class hitbtc2 extends hitbtc {
                         'ZSC' => 191,
                     ),
                     'deposit' => array (
-                        'BTC' => 0,
-                        'ETH' => 0,
+                        'BTC' => 0.0006,
+                        'ETH' => 0.003,
                         'BCH' => 0,
                         'USDT' => 0,
                         'BTG' => 0,
@@ -506,14 +512,14 @@ class hitbtc2 extends hitbtc {
     }
 
     public function common_currency_code ($currency) {
-        if ($currency == 'CAT')
-            return 'BitClave';
-        return $currency;
-    }
-
-    public function currency_id ($currency) {
-        if ($currency == 'BitClave')
-            return 'CAT';
+        $currencies = array (
+            'XBT' => 'BTC',
+            'DRK' => 'DASH',
+            'CAT' => 'BitClave',
+            'USD' => 'USDT',
+        );
+        if (is_array ($currencies) && array_key_exists ($currency, $currencies))
+            return $currencies[$currency];
         return $currency;
     }
 
@@ -527,10 +533,10 @@ class hitbtc2 extends hitbtc {
         for ($i = 0; $i < count ($markets); $i++) {
             $market = $markets[$i];
             $id = $market['id'];
-            $base = $market['baseCurrency'];
-            $quote = $market['quoteCurrency'];
-            $base = $this->common_currency_code($base);
-            $quote = $this->common_currency_code($quote);
+            $baseId = $market['baseCurrency'];
+            $quoteId = $market['quoteCurrency'];
+            $base = $this->common_currency_code($baseId);
+            $quote = $this->common_currency_code($quoteId);
             $symbol = $base . '/' . $quote;
             $lot = floatval ($market['quantityIncrement']);
             $step = floatval ($market['tickSize']);
@@ -546,6 +552,8 @@ class hitbtc2 extends hitbtc {
                 'symbol' => $symbol,
                 'base' => $base,
                 'quote' => $quote,
+                'baseId' => $baseId,
+                'quoteId' => $quoteId,
                 'active' => true,
                 'lot' => $lot,
                 'step' => $step,
@@ -677,6 +685,7 @@ class hitbtc2 extends hitbtc {
         $this->load_markets();
         $orderbook = $this->publicGetOrderbookSymbol (array_merge (array (
             'symbol' => $this->market_id($symbol),
+            // 'limit' => 100, // default = 100, 0 = unlimited
         ), $params));
         return $this->parse_order_book($orderbook, null, 'bid', 'ask', 'price', 'size');
     }
@@ -789,9 +798,10 @@ class hitbtc2 extends hitbtc {
     public function create_order ($symbol, $type, $side, $amount, $price = null, $params = array ()) {
         $this->load_markets();
         $market = $this->market ($symbol);
-        $clientOrderId = $this->uuid ();
         // their max accepted length is 32 characters
-        $clientOrderId = str_replace ('-', '', $clientOrderId);
+        $uuid = $this->uuid ();
+        $parts = explode ('-', $uuid);
+        $clientOrderId = implode ('', $parts);
         $clientOrderId = mb_substr ($clientOrderId, 0, 32);
         $amount = floatval ($amount);
         $request = array (
@@ -801,7 +811,7 @@ class hitbtc2 extends hitbtc {
             'quantity' => $this->amount_to_precision($symbol, $amount),
             'type' => $type,
         );
-        if ($type == 'limit') {
+        if ($type === 'limit') {
             $request['price'] = $this->price_to_precision($symbol, $price);
         } else {
             $request['timeInForce'] = 'FOK';
@@ -833,13 +843,13 @@ class hitbtc2 extends hitbtc {
         $amount = $this->safe_float($order, 'quantity');
         $filled = $this->safe_float($order, 'cumQuantity');
         $status = $order['status'];
-        if ($status == 'new') {
+        if ($status === 'new') {
             $status = 'open';
-        } else if ($status == 'suspended') {
+        } else if ($status === 'suspended') {
             $status = 'open';
-        } else if ($status == 'partiallyFilled') {
+        } else if ($status === 'partiallyFilled') {
             $status = 'open';
-        } else if ($status == 'filled') {
+        } else if ($status === 'filled') {
             $status = 'closed';
         }
         $id = (string) $order['clientOrderId'];
@@ -889,7 +899,7 @@ class hitbtc2 extends hitbtc {
         throw new OrderNotFound ($this->id . ' order ' . $id . ' not found');
     }
 
-    public function fetch_active_order ($id, $symbol = null, $params = array ()) {
+    public function fetch_open_order ($id, $symbol = null, $params = array ()) {
         $this->load_markets();
         $response = $this->privateGetOrderClientOrderId (array_merge (array (
             'clientOrderId' => $id,
@@ -950,10 +960,22 @@ class hitbtc2 extends hitbtc {
         return $this->parse_trades($response, $market, $since, $limit);
     }
 
-    public function create_deposit_address ($currency, $params = array ()) {
-        $currencyId = $this->currency_id ($currency);
+    public function fetch_order_trades ($id, $symbol = null, $params = array ()) {
+        // The $id needed here is the exchange's $id, and not the clientOrderID, which is
+        // the $id that is stored in the unified api order $id. In order the get the exchange's $id,
+        // you need to grab it from order['info']['id']
+        $this->load_markets();
+        $trades = $this->privateGetHistoryOrderIdTrades (array_merge (array (
+            'id' => $id,
+        ), $params));
+        return $this->parse_trades($trades);
+    }
+
+    public function create_deposit_address ($code, $params = array ()) {
+        $this->load_markets();
+        $currency = $this->currency ($code);
         $response = $this->privatePostAccountCryptoAddressCurrency (array (
-            'currency' => $currencyId,
+            'currency' => $currency['id'],
         ));
         $address = $response['address'];
         return array (
@@ -964,10 +986,11 @@ class hitbtc2 extends hitbtc {
         );
     }
 
-    public function fetch_deposit_address ($currency, $params = array ()) {
-        $currencyId = $this->currency_id ($currency);
+    public function fetch_deposit_address ($code, $params = array ()) {
+        $this->load_markets();
+        $currency = $this->currency ($code);
         $response = $this->privateGetAccountCryptoAddressCurrency (array (
-            'currency' => $currencyId,
+            'currency' => $currency['id'],
         ));
         $address = $response['address'];
         return array (
@@ -978,12 +1001,11 @@ class hitbtc2 extends hitbtc {
         );
     }
 
-    public function withdraw ($currency, $amount, $address, $params = array ()) {
-        $currencyId = $this->currency_id ($currency);
-        $amount = floatval ($amount);
+    public function withdraw ($code, $amount, $address, $params = array ()) {
+        $currency = $this->currency ($code);
         $response = $this->privatePostAccountCryptoWithdraw (array_merge (array (
-            'currency' => $currencyId,
-            'amount' => $amount,
+            'currency' => $currency['id'],
+            'amount' => floatval ($amount),
             'address' => $address,
         ), $params));
         return array (
@@ -995,14 +1017,14 @@ class hitbtc2 extends hitbtc {
     public function sign ($path, $api = 'public', $method = 'GET', $params = array (), $headers = null, $body = null) {
         $url = '/api' . '/' . $this->version . '/';
         $query = $this->omit ($params, $this->extract_params($path));
-        if ($api == 'public') {
+        if ($api === 'public') {
             $url .= $api . '/' . $this->implode_params($path, $params);
             if ($query)
                 $url .= '?' . $this->urlencode ($query);
         } else {
             $this->check_required_credentials();
             $url .= $this->implode_params($path, $params);
-            if ($method == 'GET') {
+            if ($method === 'GET') {
                 if ($query)
                     $url .= '?' . $this->urlencode ($query);
             } else {
@@ -1012,7 +1034,7 @@ class hitbtc2 extends hitbtc {
             $payload = $this->encode ($this->apiKey . ':' . $this->secret);
             $auth = base64_encode ($payload);
             $headers = array (
-                'Authorization' => "Basic " . $this->decode ($auth),
+                'Authorization' => 'Basic ' . $this->decode ($auth),
                 'Content-Type' => 'application/json',
             );
         }
@@ -1021,16 +1043,18 @@ class hitbtc2 extends hitbtc {
     }
 
     public function handle_errors ($code, $reason, $url, $method, $headers, $body) {
-        if ($code == 400) {
-            if ($body[0] == "{") {
+        if ($code === 400) {
+            if ($body[0] === '{') {
                 $response = json_decode ($body, $as_associative_array = true);
                 if (is_array ($response) && array_key_exists ('error', $response)) {
                     if (is_array ($response['error']) && array_key_exists ('message', $response['error'])) {
                         $message = $response['error']['message'];
-                        if ($message == 'Order not found') {
+                        if ($message === 'Order not found') {
                             throw new OrderNotFound ($this->id . ' order not found in active orders');
-                        } else if ($message == 'Insufficient funds') {
-                            throw new InsufficientFunds ($this->id . ' ' . $message);
+                        } else if ($message === 'Insufficient funds') {
+                            throw new InsufficientFunds ($this->id . ' ' . $body);
+                        } else if ($message === 'Duplicate clientOrderId') {
+                            throw new InvalidOrder ($this->id . ' ' . $body);
                         }
                     }
                 }

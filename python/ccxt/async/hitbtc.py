@@ -4,6 +4,7 @@ from ccxt.async.base.exchange import Exchange
 import hashlib
 from ccxt.base.errors import ExchangeError
 from ccxt.base.errors import InsufficientFunds
+from ccxt.base.errors import OrderNotFound
 
 
 class hitbtc (Exchange):
@@ -12,7 +13,7 @@ class hitbtc (Exchange):
         return self.deep_extend(super(hitbtc, self).describe(), {
             'id': 'hitbtc',
             'name': 'HitBTC',
-            'countries': 'HK',  # Hong Kong
+            'countries': 'UK',
             'rateLimit': 1500,
             'version': '1',
             'hasCORS': False,
@@ -26,6 +27,10 @@ class hitbtc (Exchange):
                 'api': 'http://api.hitbtc.com',
                 'www': 'https://hitbtc.com',
                 'doc': 'https://github.com/hitbtc-com/hitbtc-api/blob/master/APIv1.md',
+                'fees': [
+                    'https://hitbtc.com/fees-and-limits',
+                    'https://support.hitbtc.com/hc/en-us/articles/115005148605-Fees-and-limits',
+                ],
             },
             'api': {
                 'public': {
@@ -36,7 +41,7 @@ class hitbtc (Exchange):
                         '{symbol}/trades/recent',
                         'symbols',
                         'ticker',
-                        'time,'
+                        'time',
                     ],
                 },
                 'trading': {
@@ -80,10 +85,12 @@ class hitbtc (Exchange):
                     'tierBased': False,
                     'percentage': False,
                     'withdraw': {
-                        'BTC': 0.0007,
-                        'ETH': 0.00958,
+                        'BTC': 0.00085,
+                        'BCC': 0.0018,
+                        'ETH': 0.00215,
                         'BCH': 0.0018,
-                        'USDT': 5,
+                        'USDT': 100,
+                        'DASH': 0.03,
                         'BTG': 0.0005,
                         'LTC': 0.003,
                         'ZEC': 0.0001,
@@ -95,7 +102,7 @@ class hitbtc (Exchange):
                         'AIR': 565,
                         'AMP': 9,
                         'ANT': 6.7,
-                        'ARDR': 2,
+                        'ARDR': 1,
                         'ARN': 18.5,
                         'ART': 26,
                         'ATB': 0.0004,
@@ -275,8 +282,8 @@ class hitbtc (Exchange):
                         'ZSC': 191,
                     },
                     'deposit': {
-                        'BTC': 0,
-                        'ETH': 0,
+                        'BTC': 0.0006,
+                        'ETH': 0.003,
                         'BCH': 0,
                         'USDT': 0,
                         'BTG': 0,
@@ -480,6 +487,8 @@ class hitbtc (Exchange):
             return 'DASH'
         if currency == 'CAT':
             return 'BitClave'
+        if currency == 'USD':
+            return 'USDT'
         return currency
 
     async def fetch_markets(self):
@@ -488,18 +497,20 @@ class hitbtc (Exchange):
         for p in range(0, len(markets['symbols'])):
             market = markets['symbols'][p]
             id = market['symbol']
-            base = market['commodity']
-            quote = market['currency']
+            baseId = market['commodity']
+            quoteId = market['currency']
             lot = float(market['lot'])
             step = float(market['step'])
-            base = self.common_currency_code(base)
-            quote = self.common_currency_code(quote)
+            base = self.common_currency_code(baseId)
+            quote = self.common_currency_code(quoteId)
             symbol = base + '/' + quote
             result.append({
                 'id': id,
                 'symbol': symbol,
                 'base': base,
                 'quote': quote,
+                'baseId': baseId,
+                'quoteId': quoteId,
                 'lot': lot,
                 'step': step,
                 'info': market,
@@ -660,10 +671,7 @@ class hitbtc (Exchange):
         else:
             order['timeInForce'] = 'FOK'
         response = await self.tradingPostNewOrder(self.extend(order, params))
-        return {
-            'info': response,
-            'id': response['ExecutionReport']['clientOrderId'],
-        }
+        return self.parse_order(response['ExecutionReport'], market)
 
     async def cancel_order(self, id, symbol=None, params={}):
         await self.load_markets()
@@ -683,7 +691,9 @@ class hitbtc (Exchange):
         return self.safe_string(statuses, status)
 
     def parse_order(self, order, market=None):
-        timestamp = int(order['lastTimestamp'])
+        timestamp = self.safe_integer(order, 'lastTimestamp')
+        if timestamp is None:
+            timestamp = self.safe_integer(order, 'timestamp')
         symbol = None
         if not market:
             market = self.markets_by_id[order['symbol']]
@@ -692,17 +702,28 @@ class hitbtc (Exchange):
             status = self.parse_order_status(status)
         averagePrice = self.safe_float(order, 'avgPrice', 0.0)
         price = self.safe_float(order, 'orderPrice')
+        if price is None:
+            price = self.safe_float(order, 'price')
         amount = self.safe_float(order, 'orderQuantity')
+        if amount is None:
+            amount = self.safe_float(order, 'quantity')
         remaining = self.safe_float(order, 'quantityLeaves')
+        if not remaining:
+            remaining = self.safe_float(order, 'leavesQuantity')
         filled = None
         cost = None
+        amountDefined = (amount is not None)
+        remainingDefined = (remaining is not None)
         if market:
             symbol = market['symbol']
-            amount *= market['lot']
-            remaining *= market['lot']
-        if amount and remaining:
-            filled = amount - remaining
-            cost = averagePrice * filled
+            if amountDefined:
+                amount *= market['lot']
+            if remainingDefined:
+                remaining *= market['lot']
+        if amountDefined:
+            if remainingDefined:
+                filled = amount - remaining
+                cost = averagePrice * filled
         return {
             'id': str(order['clientOrderId']),
             'info': order,
@@ -725,7 +746,9 @@ class hitbtc (Exchange):
         response = await self.tradingGetOrder(self.extend({
             'clientOrderId': id,
         }, params))
-        return self.parse_order(response['orders'][0])
+        if response['orders'][0]:
+            return self.parse_order(response['orders'][0])
+        raise OrderNotFound(self.id + ' fetchOrder() error: ' + self.response)
 
     async def fetch_open_orders(self, symbol=None, since=None, limit=None, params={}):
         await self.load_markets()
@@ -756,10 +779,11 @@ class hitbtc (Exchange):
         response = await self.tradingGetOrdersRecent(self.extend(request, params))
         return self.parse_orders(response['orders'], market, since, limit)
 
-    async def withdraw(self, currency, amount, address, params={}):
+    async def withdraw(self, code, amount, address, params={}):
         await self.load_markets()
+        currency = self.currency(code)
         response = await self.paymentPostPayout(self.extend({
-            'currency_code': currency,
+            'currency_code': currency['id'],
             'amount': amount,
             'address': address,
         }, params))
