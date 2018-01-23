@@ -1,6 +1,7 @@
 from ccxt.base.exchange import Exchange
 import math
 import datetime
+from decimal import Decimal
 from ccxt.base.errors import ExchangeError
 
 
@@ -328,24 +329,26 @@ class bitstamp (Exchange):
         status = self.parse_order_status(order)
     
         if 'transactions' in order:
-            filled_amount = 0
-            total_fees = 0
-            total_price = 0
+            filled_amount = Decimal(0.)
+            total_fees = Decimal(0.)
+            total_price = Decimal(0.)
             ignore_keys = ['fee', 'price', 'datetime', 'usd', 'tid', 'type']
             for transaction in order['transactions']:
-                # Fine the crypto currency
-                total_fees += float(transaction['fee'])
-                total_price += float(transaction['price'])
+                total_fees += Decimal(transaction['fee'])
+                total_price += Decimal(transaction['price'])
+
+                # Find the crypto currency
                 for trans_key, trans_value in transaction.items():
                     if trans_key in ignore_keys:
                         continue
-                    filled_amount += float(trans_value)
+                    filled_amount += Decimal(trans_value)
             return {
                 'id': order['id'],
+                'info': order,
                 'status': status,
-                'filled': filled_amount,
-                'total_fees': total_fees,
-                'total_price': total_price,
+                'filled': float(filled_amount),
+                'price': float(total_price),
+                'total_fees': float(total_fees),
             }
     
         # TODO: need to fix this
