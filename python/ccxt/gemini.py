@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+from decimal import *
 from ccxt.base.exchange import Exchange
 import base64
 import hashlib
@@ -160,9 +161,9 @@ class gemini (Exchange):
             balance = balances[b]
             currency = balance['currency']
             account = {
-                'free': float(balance['available']),
-                'used': 0.0,
-                'total': float(balance['amount']),
+                'free': Decimal(balance['available']),
+                'used': Decimal(0.0),
+                'total': Decimal(balance['amount']),
             }
             account['used'] = account['total'] - account['free']
             result[currency] = account
@@ -233,7 +234,9 @@ class gemini (Exchange):
 
     def deposit_address(self, currency, params={}):
         self.load_markets()
-        request = {}
+        request = {
+            'currency': currency,
+        }
         if 'label' in params:
             request['label'] = params['label']
 

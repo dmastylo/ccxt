@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+from decimal import *
 from ccxt.base.exchange import Exchange
 import base64
 import hashlib
@@ -202,9 +203,9 @@ class gdax (Exchange):
             balance = balances[b]
             currency = balance['currency']
             account = {
-                'free': float(balance['available']),
-                'used': float(balance['hold']),
-                'total': float(balance['balance']),
+                'free': Decimal(balance['available']),
+                'used': Decimal(balance['hold']),
+                'total': Decimal(balance['balance']),
             }
             result[currency] = account
         return self.parse_balance(result)

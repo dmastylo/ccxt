@@ -1,3 +1,4 @@
+from decimal import *
 from ccxt.base.exchange import Exchange
 import math
 import datetime
@@ -288,11 +289,11 @@ class bitstamp (Exchange):
             used = lowercase + '_reserved'
             account = self.account()
             if free in balance:
-                account['free'] = float(balance[free])
+                account['free'] = Decimal(balance[free])
             if used in balance:
-                account['used'] = float(balance[used])
+                account['used'] = Decimal(balance[used])
             if total in balance:
-                account['total'] = float(balance[total])
+                account['total'] = Decimal(balance[total])
             result[currency] = account
         return self.parse_balance(result)
 

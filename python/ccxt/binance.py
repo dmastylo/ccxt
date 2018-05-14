@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+from decimal import * 
 from ccxt.base.exchange import Exchange
 import math
 import json
@@ -399,9 +400,9 @@ class binance (Exchange):
             asset = balance['asset']
             currency = self.common_currency_code(asset)
             account = {
-                'free': float(balance['free']),
-                'used': float(balance['locked']),
-                'total': 0.0,
+                'free': Decimal(balance['free']),
+                'used': Decimal(balance['locked']),
+                'total': Decimal(0.0),
             }
             account['total'] = self.sum(account['free'], account['used'])
             result[currency] = account
